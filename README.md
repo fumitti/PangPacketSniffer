@@ -1,5 +1,6 @@
 # PangPacketSniffer
-Monitor, decrypt, categorize and store Pang communications on the network
+Monitor, decrypt, categorize and store Pang communications on the network.
+
 Maybe need Npcap on Windows.
 
 # License
