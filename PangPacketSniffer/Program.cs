@@ -61,6 +61,12 @@ namespace PangPacketSniffer
                 LoginServerIP = IPAddress.Parse(Console.ReadLine());
                 Console.WriteLine();
             }
+            if (LoginServerPort == 0)
+            {
+                Console.Write("-- Please input target LoginServer Port: ");
+                LoginServerPort = int.Parse(Console.ReadLine());
+                Console.WriteLine();
+            }
             BreakIpAddresses.Add(LoginServerIP);
 
             Console.WriteLine
@@ -95,11 +101,14 @@ namespace PangPacketSniffer
                 BeforePacket = tcpPacket;
 
 
+                var fromServer = Equals(packet.Extract<EthernetPacket>().DestinationHardwareAddress, LocalPhysicalAddress);
                 var server = ServerTypeEnum.Unknown;
                 var key = LoginKeyIndex;
                 var checkHeader = tcpPacket.PayloadData.Take(6).ToArray();
                 if (srcIp.Equals(LoginServerIP) || dstIp.Equals(LoginServerIP))
                 {
+                    if(fromServer && srcPort != LoginServerPort || !fromServer && dstPort != LoginServerPort)
+                        return;
                     var loginHelloHeader = new byte[] { 0x00, 0x0b, 0x00, 0x00, 0x00, 0x00 };
                     if (checkHeader.SequenceEqual(loginHelloHeader))
                     {
@@ -115,7 +124,7 @@ namespace PangPacketSniffer
                     }
                     
                 }
-                else if (GameServers.Select(g => g.IP).Contains(srcIp) || GameServers.Select(g => g.IP).Contains(dstIp))
+                else if (fromServer && GameServers.Select(g => (g.IP,g.Port)).Contains((srcIp,srcPort)) || !fromServer && GameServers.Select(g => (g.IP,g.Port)).Contains((dstIp,dstPort)))
                 {
                     var gameHelloHeader = new byte[] { 0x00, 0x06, 0x00, 0x00, 0x3F, 0x00 };
                     var gameHelloHeaderTH = new byte[] { 0x00, 0x16, 0x00, 0x00, 0x3F, 0x00 };
@@ -123,8 +132,11 @@ namespace PangPacketSniffer
                     {
                         Console.WriteLine(tcpPacket.PayloadData.HexDump());
                         GameKeyIndex = tcpPacket.PayloadData[8];
+                        ConnectingGameServer = GameServers.Single(g => Equals(g.IP, srcIp) && g.Port == srcPort);
                         return;
                     }
+                    if (fromServer && !CheckCapture(ConnectingGameServer,srcIp,srcPort) || !fromServer && !CheckCapture(ConnectingGameServer,dstIp,dstPort))
+                        return;
                     server = ServerTypeEnum.Game;
                     key = GameKeyIndex;
                     if (!GotGameKey)
@@ -134,13 +146,14 @@ namespace PangPacketSniffer
                     }
 
                 }
-                else if (MessageServers.Select(g => g.IP).Contains(srcIp) || MessageServers.Select(g => g.IP).Contains(dstIp))
+                else if (fromServer && MessageServers.Select(m => (m.IP, m.Port)).Contains((srcIp, srcPort)) || !fromServer && MessageServers.Select(m => (m.IP, m.Port)).Contains((dstIp, dstPort)))
                 {
                     var messageHelloHeader = new byte[] { 0x00, 0x09, 0x00, 0x00, 0x2E, 0x00 };
                     if (checkHeader.SequenceEqual(messageHelloHeader))
                     {
                         Console.WriteLine(tcpPacket.PayloadData.HexDump());
                         MessageKeyIndex = tcpPacket.PayloadData[7];
+                        ConnectingMessageServer = MessageServers.Single(m => Equals(m.IP, srcIp) && m.Port == srcPort);
                         return;
                     }
                     if (tcpPacket.PayloadData.First() == 0)
@@ -148,6 +161,8 @@ namespace PangPacketSniffer
                         Console.WriteLine("###Message Hello?###");
                         Console.WriteLine(tcpPacket.PayloadData.HexDump());
                     }
+                    if (fromServer && !CheckCapture(ConnectingMessageServer, srcIp, srcPort) || !fromServer && !CheckCapture(ConnectingMessageServer, dstIp, dstPort))
+                        return;
                     server = ServerTypeEnum.Message;
                     key = MessageKeyIndex;
                     if (!GotMessageKey)
@@ -165,7 +180,6 @@ namespace PangPacketSniffer
 
                 var minLen = 5;
                 var lenOff = 4;
-                var fromServer = Equals(packet.Extract<EthernetPacket>().DestinationHardwareAddress, LocalPhysicalAddress);
                 if (fromServer)
                 {
                     minLen = 8;
@@ -217,6 +231,13 @@ namespace PangPacketSniffer
                     Console.WriteLine(msg.HexDump());
                 }
             }
+        }
+
+        private static bool CheckCapture(IServer server, IPAddress ip, int port)
+        {
+            if (server == null)
+                return false;
+            return ip.Equals(server.IP) && port.Equals(server.Port);
         }
 
         private static byte[] ContinueBytes { get; set; } // for TCP Segmentation
@@ -295,8 +316,11 @@ namespace PangPacketSniffer
         private static Encoding UsingEncode { get; } = Encoding.Default;
         private static PhysicalAddress LocalPhysicalAddress { get; set; }
         private static IPAddress LoginServerIP { get; set; }
+        private static int LoginServerPort { get; set; }
         private static List<GameServer> GameServers { get; } = new List<GameServer>();
+        private static GameServer ConnectingGameServer { get; set; }
         private static List<MessageServer> MessageServers { get; } = new List<MessageServer>();
+        private static MessageServer ConnectingMessageServer { get; set; }
         private static List<IPAddress> BreakIpAddresses { get; } = new List<IPAddress>();
         private static DateTime LaunchTime { get; } = DateTime.Now;
         private static byte LoginKeyIndex
