@@ -294,11 +294,10 @@ namespace PangPacketSniffer
 
         private static Encoding UsingEncode { get; } = Encoding.Default;
         private static PhysicalAddress LocalPhysicalAddress { get; set; }
-        private static IPAddress LoginServerIP { get; set; } = IPAddress.Parse("203.107.140.34");
+        private static IPAddress LoginServerIP { get; set; }
         private static List<GameServer> GameServers { get; } = new List<GameServer>();
         private static List<MessageServer> MessageServers { get; } = new List<MessageServer>();
         private static List<IPAddress> BreakIpAddresses { get; } = new List<IPAddress>();
-        private static int? LoginServerPort { get; set; } = 1234;
         private static DateTime LaunchTime { get; } = DateTime.Now;
         private static byte LoginKeyIndex
         {
@@ -461,6 +460,7 @@ namespace PangPacketSniffer
 
     internal static class Utils
     {
+        // this method from https://www.codeproject.com/Articles/36747/Quick-and-Dirty-HexDump-of-a-Byte-Array
         public static string HexDump(this byte[] bytes, int bytesPerLine = 16)
         {
             if (bytes == null) return "<null>";
