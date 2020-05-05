@@ -515,7 +515,7 @@ namespace PangPacketSniffer
         public byte Num2 => RawMessage[7];
         public int CompressedSize { get; set; }
 
-        public short Id => Message[0];
+        public short Id => BitConverter.ToInt16(Message[..2]);
         public byte[] Message { get; }
         public byte[] RawMessage { get; }
         public byte KeyIndex { get; }
@@ -542,7 +542,7 @@ namespace PangPacketSniffer
 
         public byte Empty => RawMessage[3];
         public int MsgSize { get; set; }
-        public short Id => Message[0];
+        public short Id => BitConverter.ToInt16(Message[..2]);
         public byte[] Message { get; }
         public byte[] RawMessage { get; }
         public byte KeyIndex { get; }
