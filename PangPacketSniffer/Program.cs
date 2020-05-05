@@ -11,10 +11,9 @@ using SharpPcap;
 
 namespace PangPacketSniffer
 {
-    class Program
+    internal class Program
     {
-
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             var devices = CaptureDeviceList.Instance;
             if (devices.Count < 1)
@@ -27,7 +26,7 @@ namespace PangPacketSniffer
             Console.WriteLine("----------------------------------------------------");
             Console.WriteLine();
 
-            int i = 0;
+            var i = 0;
 
             foreach (var dev in devices)
             {
@@ -44,10 +43,10 @@ namespace PangPacketSniffer
             device.OnPacketArrival +=
                 device_OnPacketArrival;
 
-            int readTimeoutMilliseconds = 1000;
+            var readTimeoutMilliseconds = 1000;
             device.Open(DeviceMode.Promiscuous, readTimeoutMilliseconds);
 
-            string filter = "ip and tcp";
+            var filter = "ip and tcp";
             device.Filter = filter;
 
             Console.WriteLine();
@@ -59,17 +58,19 @@ namespace PangPacketSniffer
                 LoginServerIP = IPAddress.Parse(Console.ReadLine());
                 Console.WriteLine();
             }
+
             if (LoginServerPort == 0)
             {
                 Console.Write("-- Please input target LoginServer Port: ");
                 LoginServerPort = int.Parse(Console.ReadLine());
                 Console.WriteLine();
             }
+
             BreakIpAddresses.Add(LoginServerIP);
             ServerPorts.Add(LoginServerPort);
 
             Console.WriteLine
-                ("-- Listening on {0}, hit 'Ctrl-C' to exit...",
+            ("-- Listening on {0}, hit 'Ctrl-C' to exit...",
                 device.Description);
 
             device.Capture();
@@ -90,9 +91,9 @@ namespace PangPacketSniffer
 
         private static void HandleTcpPacket(TcpPacket tcpPacket)
         {
-            var ipPacket = (IPPacket)tcpPacket.ParentPacket;
-            IPAddress srcIp = ipPacket.SourceAddress;
-            IPAddress dstIp = ipPacket.DestinationAddress;
+            var ipPacket = (IPPacket) tcpPacket.ParentPacket;
+            var srcIp = ipPacket.SourceAddress;
+            var dstIp = ipPacket.DestinationAddress;
             int srcPort = tcpPacket.SourcePort;
             int dstPort = tcpPacket.DestinationPort;
             if (!BreakIpAddresses.Contains(srcIp) && !BreakIpAddresses.Contains(dstIp))
@@ -111,59 +112,70 @@ namespace PangPacketSniffer
             {
                 if (fromServer && srcPort != LoginServerPort || !fromServer && dstPort != LoginServerPort)
                     return;
-                var loginHelloHeader = new byte[] { 0x00, 0x0b, 0x00, 0x00, 0x00, 0x00 };
+                var loginHelloHeader = new byte[] {0x00, 0x0b, 0x00, 0x00, 0x00, 0x00};
+                server = ServerTypeEnum.Login;
                 if (checkHeader.SequenceEqual(loginHelloHeader))
                 {
+                    Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
+                    Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
                     Console.WriteLine(tcpPacket.PayloadData.HexDump());
                     LoginKeyIndex = tcpPacket.PayloadData[6];
                     return;
                 }
-                server = ServerTypeEnum.Login;
+
                 if (!GotLoginKey)
                 {
                     Console.WriteLine("???LoginKey Unknown Skipped???");
                     return;
                 }
-
             }
-            else if (fromServer && GameServers.Select(g => (g.IP, g.Port)).Contains((srcIp, srcPort)) || !fromServer && GameServers.Select(g => (g.IP, g.Port)).Contains((dstIp, dstPort)))
+            else if (fromServer && GameServers.Select(g => (g.IP, g.Port)).Contains((srcIp, srcPort)) ||
+                     !fromServer && GameServers.Select(g => (g.IP, g.Port)).Contains((dstIp, dstPort)))
             {
-                var gameHelloHeader = new byte[] { 0x00, 0x06, 0x00, 0x00, 0x3F, 0x00 };
-                var gameHelloHeaderTH = new byte[] { 0x00, 0x16, 0x00, 0x00, 0x3F, 0x00 };
-                if (checkHeader.SequenceEqual(gameHelloHeader) || checkHeader.SequenceEqual(gameHelloHeaderTH))
+                var gameHelloHeader = new byte[] {0x00, 0x3F, 0x00, 0x01, 0x01};
+                server = ServerTypeEnum.Game;
+                if (tcpPacket.PayloadData[0] == 0x00 && tcpPacket.PayloadData.Skip(3).Take(5).ToArray().SequenceEqual(gameHelloHeader))
                 {
-                    Console.WriteLine(tcpPacket.PayloadData.HexDump());
+                    Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
+                    Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
+                    HandleMessage(new PangServerMessage(tcpPacket.PayloadData, server));
                     GameKeyIndex = tcpPacket.PayloadData[8];
                     ConnectingGameServer = GameServers.Single(g => Equals(g.IP, srcIp) && g.Port == srcPort);
                     return;
                 }
-                if (fromServer && !CheckCapture(ConnectingGameServer, srcIp, srcPort) || !fromServer && !CheckCapture(ConnectingGameServer, dstIp, dstPort))
+                if (fromServer && !CheckCapture(ConnectingGameServer, srcIp, srcPort) ||
+                    !fromServer && !CheckCapture(ConnectingGameServer, dstIp, dstPort))
                     return;
-                server = ServerTypeEnum.Game;
                 key = GameKeyIndex;
                 if (!GotGameKey)
                 {
                     Console.WriteLine("???GameKey Unknown Skipped???");
                     return;
                 }
-
             }
-            else if (fromServer && MessageServers.Select(m => (m.IP, m.Port)).Contains((srcIp, srcPort)) || !fromServer && MessageServers.Select(m => (m.IP, m.Port)).Contains((dstIp, dstPort)))
+            else if (fromServer && MessageServers.Select(m => (m.IP, m.Port)).Contains((srcIp, srcPort)) ||
+                     !fromServer && MessageServers.Select(m => (m.IP, m.Port)).Contains((dstIp, dstPort)))
             {
-                var messageHelloHeader = new byte[] { 0x00, 0x09, 0x00, 0x00, 0x2E, 0x00 };
+                var messageHelloHeader = new byte[] {0x00, 0x09, 0x00, 0x00, 0x2E, 0x00};
+                server = ServerTypeEnum.Message;
                 if (checkHeader.SequenceEqual(messageHelloHeader))
                 {
-                    Console.WriteLine(tcpPacket.PayloadData.HexDump());
+                    Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
+                    Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
+                    HandleMessage(new PangServerMessage(tcpPacket.PayloadData, ServerTypeEnum.Message));
                     MessageKeyIndex = tcpPacket.PayloadData[7];
                     ConnectingMessageServer = MessageServers.Single(m => Equals(m.IP, srcIp) && m.Port == srcPort);
                     return;
                 }
+
                 if (tcpPacket.PayloadData.First() == 0)
                 {
                     Console.WriteLine("###Message Hello?###");
                     Console.WriteLine(tcpPacket.PayloadData.HexDump());
                 }
-                if (fromServer && !CheckCapture(ConnectingMessageServer, srcIp, srcPort) || !fromServer && !CheckCapture(ConnectingMessageServer, dstIp, dstPort))
+
+                if (fromServer && !CheckCapture(ConnectingMessageServer, srcIp, srcPort) ||
+                    !fromServer && !CheckCapture(ConnectingMessageServer, dstIp, dstPort))
                     return;
                 server = ServerTypeEnum.Message;
                 key = MessageKeyIndex;
@@ -172,7 +184,6 @@ namespace PangPacketSniffer
                     Console.WriteLine("???MessageKey Unknown Skipped???");
                     return;
                 }
-
             }
             else
             {
@@ -190,7 +201,9 @@ namespace PangPacketSniffer
                     Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
             }
             else if (ContinueBytes == null)
+            {
                 Console.WriteLine($"---{server} Client Packet(to  :{dstIp})---");
+            }
 
             var msg = tcpPacket.PayloadData;
             if (ContinueBytes != null) // try TCP Segmentation ReConstruction
@@ -201,9 +214,9 @@ namespace PangPacketSniffer
                     UnProcessingPackets.Add(tcpPacket);
                     return;
                 }
+
                 msg = ContinueBytes.Concat(tcpPacket.PayloadData).ToArray();
                 while (UnProcessingPackets.Any())
-                {
                     try
                     {
                         var p = UnProcessingPackets.First(p => p.SequenceNumber == nextSeq);
@@ -215,11 +228,11 @@ namespace PangPacketSniffer
                     {
                         break;
                     }
-                }
+
                 ContinueBytes = null;
                 BeforePacket2 = null;
             }
-            else if (UnProcessedData!= null) // try unprocessed data recovery
+            else if (UnProcessedData != null) // try unprocessed data recovery
             {
                 var nextSeq = BeforePacket2.SequenceNumber + BeforePacket2.PayloadData.Length;
                 if (tcpPacket.SequenceNumber != nextSeq)
@@ -241,29 +254,31 @@ namespace PangPacketSniffer
                 {
                     UnProcessedData = null;
                 }
-
             }
+
             ParsePacket(msg);
 
-            void ParsePacket(byte[] msg){
+            void ParsePacket(byte[] msg)
+            {
                 while (msg.Length > minLen)
                 {
-                        var size = BitConverter.ToUInt16(new[] { msg[1], msg[2] }) + lenOff;
-                        if (size > msg.Length)
-                        {
-                            ContinueBytes = msg;
-                            BeforePacket2 = tcpPacket;
-                            break;
-                        }
+                    var size = BitConverter.ToUInt16(new[] {msg[1], msg[2]}) + lenOff;
+                    if (size > msg.Length)
+                    {
+                        ContinueBytes = msg;
+                        BeforePacket2 = tcpPacket;
+                        break;
+                    }
 
-                        Console.WriteLine($"---Message(Size:{size})---");
-                        var data = msg.Take(size).ToArray();
-                        msg = msg.Skip(size).ToArray();
-                        if (fromServer)
-                            HandleMessage(new PangServerMessage(data, key, server));
-                        else
-                            HandleMessage(new PangClientMessage(data, key, server));
+                    Console.WriteLine($"---Message(Size:{size})---");
+                    var data = msg.Take(size).ToArray();
+                    msg = msg.Skip(size).ToArray();
+                    if (fromServer)
+                        HandleMessage(new PangServerMessage(data, key, server));
+                    else
+                        HandleMessage(new PangClientMessage(data, key, server));
                 }
+
                 if (msg.Any() && ContinueBytes == null)
                 {
                     UnProcessedData = msg;
@@ -271,12 +286,12 @@ namespace PangPacketSniffer
                 }
             }
 
-            if (ContinueBytes == null && UnProcessedData == null && UnProcessingPackets.Any()) // proceed UnProcessingPackets
+            if (ContinueBytes == null && UnProcessedData == null && UnProcessingPackets.Any()
+            ) // proceed UnProcessingPackets
             {
                 var min = UnProcessingPackets.Min(p => p.SequenceNumber);
                 HandleTcpPacket(UnProcessingPackets.First(p => p.SequenceNumber == min));
             }
-
         }
 
         public static byte[] UnProcessedData { get; set; }
@@ -294,13 +309,14 @@ namespace PangPacketSniffer
         {
             Console.Write(msg.Message.Take(160).ToArray().HexDump());
             Console.WriteLine();
-            var basePath = Path.Combine(LaunchTime.ToString("s").Replace(':', '_'), msg.ServerType.ToString(),(msg is PangServerMessage? "Server":"Client"), msg.Id.ToString("X4"));
-            var fileTime = DateTime.Now.ToString("s").Replace(':','_');
+            var basePath = Path.Combine(LaunchTime.ToString("s").Replace(':', '_'), msg.ServerType.ToString(),
+                msg is PangServerMessage ? "Server" : "Client", msg.Id.ToString("X4"));
+            var fileTime = DateTime.Now.ToString("s").Replace(':', '_');
 
-            FileInfo out1 = new FileInfo(Path.Combine(basePath, fileTime + ".txt"));
+            var out1 = new FileInfo(Path.Combine(basePath, fileTime + ".txt"));
             out1.Directory?.Create();
             File.WriteAllText(out1.FullName, msg.Message.HexDump());
-            FileInfo out2 = new FileInfo(Path.Combine(basePath, "hex", fileTime + ".hex"));
+            var out2 = new FileInfo(Path.Combine(basePath, "hex", fileTime + ".hex"));
             out2.Directory?.Create();
             File.WriteAllBytes(out2.FullName, msg.Message);
             // FileInfo out3 = new FileInfo(Path.Combine(Path.Combine(basePath, "raw"), fileTime + ".txt")); // encrypted data record
@@ -313,29 +329,29 @@ namespace PangPacketSniffer
             {
                 case ServerTypeEnum.Login:
                     if (msg is PangServerMessage psm)
-                    {
                         switch (psm.Id)
                         {
                             case 0x02: // GameServerList
                                 var gameCount = psm.Message[2];
                                 var data = psm.Message.Skip(3).ToArray();
-                                for (int i = 0; i < gameCount; i++)
+                                for (var i = 0; i < gameCount; i++)
                                 {
                                     var name = UsingEncode.GetString(data[0..40]).Trim('\0');
-                                    var id = BitConverter.ToInt32(data[40..44],0);
+                                    var id = BitConverter.ToInt32(data[40..44], 0);
                                     var ip = IPAddress.Parse(UsingEncode.GetString(data[52..68]).Trim('\0'));
                                     var port = BitConverter.ToInt16(data[70..72]);
-                                    var s = new GameServer(ip,port,name,id);
+                                    var s = new GameServer(ip, port, name, id);
                                     GameServers.Add(s);
                                     BreakIpAddresses.Add(ip);
                                     ServerPorts.Add(port);
                                     data = data.Skip(92).ToArray();
                                 }
+
                                 break;
                             case 0x09: // MessageServerList
                                 var msgCount = psm.Message[2];
                                 var msgData = psm.Message.Skip(3).ToArray();
-                                for (int i = 0; i < msgCount; i++)
+                                for (var i = 0; i < msgCount; i++)
                                 {
                                     var name = UsingEncode.GetString(msgData[0..40]).Trim('\0');
                                     var id = BitConverter.ToInt32(msgData[40..44], 0);
@@ -347,9 +363,10 @@ namespace PangPacketSniffer
                                     ServerPorts.Add(port);
                                     msgData = msgData.Skip(92).ToArray();
                                 }
+
                                 break;
                         }
-                    }
+
                     break;
                 case ServerTypeEnum.Game:
                     break;
@@ -370,6 +387,7 @@ namespace PangPacketSniffer
         private static HashSet<IPAddress> BreakIpAddresses { get; } = new HashSet<IPAddress>();
         private static HashSet<int> ServerPorts { get; } = new HashSet<int>();
         private static DateTime LaunchTime { get; } = DateTime.Now;
+
         private static byte LoginKeyIndex
         {
             get => _loginKeyIndex;
@@ -386,6 +404,7 @@ namespace PangPacketSniffer
 
         private static byte _loginKeyIndex;
         public static bool GotLoginKey { get; private set; }
+
         private static byte GameKeyIndex
         {
             get => _gameKeyIndex;
@@ -398,6 +417,7 @@ namespace PangPacketSniffer
 
         private static byte _gameKeyIndex;
         public static bool GotGameKey { get; private set; }
+
         private static byte MessageKeyIndex
         {
             get => _messageKeyIndex;
@@ -410,17 +430,15 @@ namespace PangPacketSniffer
 
         private static byte _messageKeyIndex;
         public static bool GotMessageKey { get; private set; }
-
-
     }
 
     internal interface IServer
     {
-        public IPAddress IP { get;  }
-        public int Port { get;  }
+        public IPAddress IP { get; }
+        public int Port { get; }
     }
 
-    internal class MessageServer :IServer
+    internal class MessageServer : IServer
     {
         public MessageServer(IPAddress ip, int port, string name, int id)
         {
@@ -430,7 +448,7 @@ namespace PangPacketSniffer
             ID = id;
         }
 
-        public IPAddress IP { get;  }
+        public IPAddress IP { get; }
         public int Port { get; }
         public string Name { get; }
         public int ID { get; }
@@ -454,15 +472,14 @@ namespace PangPacketSniffer
             ID = id;
         }
 
-        public IPAddress IP { get;  }
-        public int Port { get;  }
-        public string Name { get;  }
-        public int ID { get;  }
+        public IPAddress IP { get; }
+        public int Port { get; }
+        public string Name { get; }
+        public int ID { get; }
     }
 
     internal interface IPangMessage
     {
-
         public short Id { get; }
 
         public byte[] Message { get; }
@@ -477,17 +494,19 @@ namespace PangPacketSniffer
 
     internal class PangServerMessage : IPangMessage
     {
-        public PangServerMessage(byte[] data, byte keyIndex,ServerTypeEnum server)
+        public PangServerMessage(byte[] data, byte keyIndex, ServerTypeEnum server)
         {
             RawMessage = data;
             KeyIndex = keyIndex;
             ServerType = server;
-            CompressedSize = BitConverter.ToInt16(new[] { RawMessage[1], RawMessage[2] }) - 5;
+            CompressedSize = BitConverter.ToInt16(new[] {RawMessage[1], RawMessage[2]}) - 5;
             Message = ServerCipher.Decrypt(RawMessage, KeyIndex);
         }
-        public PangServerMessage(byte[] data)
+
+        public PangServerMessage(byte[] data, ServerTypeEnum server)
         {
             Message = data;
+            ServerType = server;
         }
 
         public byte Num8 => RawMessage[4];
@@ -512,9 +531,10 @@ namespace PangPacketSniffer
             RawMessage = data;
             KeyIndex = keyIndex;
             ServerType = server;
-            MsgSize = BitConverter.ToInt16(new[] { RawMessage[1], RawMessage[2] }) - 1;
+            MsgSize = BitConverter.ToInt16(new[] {RawMessage[1], RawMessage[2]}) - 1;
             Message = ClientCipher.Decrypt(data, KeyIndex);
         }
+
         public PangClientMessage(byte[] data)
         {
             Message = data;
@@ -523,7 +543,7 @@ namespace PangPacketSniffer
         public byte Empty => RawMessage[3];
         public int MsgSize { get; set; }
         public short Id { get; set; }
-        public byte[] Message { get;  }
+        public byte[] Message { get; }
         public byte[] RawMessage { get; }
         public byte KeyIndex { get; }
         public byte Salt => RawMessage[0];
@@ -537,28 +557,28 @@ namespace PangPacketSniffer
         public static string HexDump(this byte[] bytes, int bytesPerLine = 16)
         {
             if (bytes == null) return "<null>";
-            int bytesLength = bytes.Length;
+            var bytesLength = bytes.Length;
 
-            char[] HexChars = "0123456789ABCDEF".ToCharArray();
+            var HexChars = "0123456789ABCDEF".ToCharArray();
 
-            int firstHexColumn =
-                  8                   // 8 characters for the address
-                + 3;                  // 3 spaces
+            var firstHexColumn =
+                8 // 8 characters for the address
+                + 3; // 3 spaces
 
-            int firstCharColumn = firstHexColumn
-                + bytesPerLine * 3       // - 2 digit for the hexadecimal value and 1 space
-                + (bytesPerLine - 1) / 8 // - 1 extra space every 8 characters from the 9th
-                + 2;                  // 2 spaces 
+            var firstCharColumn = firstHexColumn
+                                  + bytesPerLine * 3 // - 2 digit for the hexadecimal value and 1 space
+                                  + (bytesPerLine - 1) / 8 // - 1 extra space every 8 characters from the 9th
+                                  + 2; // 2 spaces 
 
-            int lineLength = firstCharColumn
-                + bytesPerLine           // - characters to show the ascii value
-                + Environment.NewLine.Length; // Carriage return and line feed (should normally be 2)
+            var lineLength = firstCharColumn
+                             + bytesPerLine // - characters to show the ascii value
+                             + Environment.NewLine.Length; // Carriage return and line feed (should normally be 2)
 
-            char[] line = (new String(' ', lineLength - Environment.NewLine.Length) + Environment.NewLine).ToCharArray();
-            int expectedLines = (bytesLength + bytesPerLine - 1) / bytesPerLine;
-            StringBuilder result = new StringBuilder(expectedLines * lineLength);
+            var line = (new string(' ', lineLength - Environment.NewLine.Length) + Environment.NewLine).ToCharArray();
+            var expectedLines = (bytesLength + bytesPerLine - 1) / bytesPerLine;
+            var result = new StringBuilder(expectedLines * lineLength);
 
-            for (int i = 0; i < bytesLength; i += bytesPerLine)
+            for (var i = 0; i < bytesLength; i += bytesPerLine)
             {
                 line[0] = HexChars[(i >> 28) & 0xF];
                 line[1] = HexChars[(i >> 24) & 0xF];
@@ -569,10 +589,10 @@ namespace PangPacketSniffer
                 line[6] = HexChars[(i >> 4) & 0xF];
                 line[7] = HexChars[(i >> 0) & 0xF];
 
-                int hexColumn = firstHexColumn;
-                int charColumn = firstCharColumn;
+                var hexColumn = firstHexColumn;
+                var charColumn = firstCharColumn;
 
-                for (int j = 0; j < bytesPerLine; j++)
+                for (var j = 0; j < bytesPerLine; j++)
                 {
                     if (j > 0 && (j & 7) == 0) hexColumn++;
                     if (i + j >= bytesLength)
@@ -583,18 +603,20 @@ namespace PangPacketSniffer
                     }
                     else
                     {
-                        byte b = bytes[i + j];
+                        var b = bytes[i + j];
                         line[hexColumn] = HexChars[(b >> 4) & 0xF];
                         line[hexColumn + 1] = HexChars[b & 0xF];
-                        line[charColumn] = (b < 32 ? '·' : (char)b);
+                        line[charColumn] = b < 32 ? '·' : (char) b;
                     }
+
                     hexColumn += 3;
                     charColumn++;
                 }
+
                 result.Append(line);
             }
+
             return result.ToString();
         }
     }
 }
-
