@@ -361,8 +361,8 @@ namespace PangPacketSniffer
         }
 
         private static Encoding UsingEncode { get; } = Encoding.Default;
-        private static IPAddress LoginServerIP { get; set; } = IPAddress.Parse("203.107.140.34");
-        private static int LoginServerPort { get; set; } = 10201;
+        private static IPAddress LoginServerIP { get; set; }
+        private static int LoginServerPort { get; set; }
         private static List<GameServer> GameServers { get; } = new List<GameServer>();
         private static GameServer ConnectingGameServer { get; set; }
         private static List<MessageServer> MessageServers { get; } = new List<MessageServer>();
