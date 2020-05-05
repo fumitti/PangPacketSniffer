@@ -72,9 +72,18 @@ namespace PangPacketSniffer
             Console.WriteLine
             ("-- Listening on {0}, hit 'Ctrl-C' to exit...",
                 device.Description);
-
-            device.Capture();
-            device.Close();
+            var filePath = Path.Combine(LaunchTime.ToString("s").Replace(':', '_'), "PacketFlow.txt");
+            var flowFile = new FileInfo(filePath);
+            flowFile.Directory?.Create();
+            using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+            using (packerFlowStream = new StreamWriter(fs))
+            {
+                packerFlowStream.AutoFlush = true;
+                device.Capture();
+                device.Close();
+                packerFlowStream.Flush();
+                fs.Flush(true);
+            }
         }
 
         private static void device_OnPacketArrival(object sender, CaptureEventArgs e)
@@ -118,7 +127,8 @@ namespace PangPacketSniffer
                 {
                     Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
                     Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
-                    Console.WriteLine(tcpPacket.PayloadData.HexDump());
+                    HandleMessage(new PangServerMessage(tcpPacket.PayloadData, server));
+                    RecordPacketFlow(fromServer, fromServer ? srcIp : dstIp, fromServer ? srcPort : dstPort, 0, server);
                     LoginKeyIndex = tcpPacket.PayloadData[6];
                     return;
                 }
@@ -139,6 +149,7 @@ namespace PangPacketSniffer
                     Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
                     Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
                     HandleMessage(new PangServerMessage(tcpPacket.PayloadData, server));
+                    RecordPacketFlow(fromServer, fromServer ? srcIp : dstIp, fromServer ? srcPort : dstPort, 0, server);
                     GameKeyIndex = tcpPacket.PayloadData[8];
                     ConnectingGameServer = GameServers.Single(g => Equals(g.IP, srcIp) && g.Port == srcPort);
                     return;
@@ -163,6 +174,7 @@ namespace PangPacketSniffer
                     Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
                     Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
                     HandleMessage(new PangServerMessage(tcpPacket.PayloadData, server));
+                    RecordPacketFlow(fromServer, fromServer ? srcIp : dstIp, fromServer ? srcPort : dstPort, 0, server);
                     MessageKeyIndex = tcpPacket.PayloadData[7];
                     ConnectingMessageServer = MessageServers.Single(m => Equals(m.IP, srcIp) && m.Port == srcPort);
                     return;
@@ -273,10 +285,13 @@ namespace PangPacketSniffer
                     Console.WriteLine($"---Message(Size:{size})---");
                     var data = msg.Take(size).ToArray();
                     msg = msg.Skip(size).ToArray();
+                    IPangMessage decoded;
                     if (fromServer)
-                        HandleMessage(new PangServerMessage(data, key, server));
+                        decoded = new PangServerMessage(data, key, server);
                     else
-                        HandleMessage(new PangClientMessage(data, key, server));
+                        decoded = new PangClientMessage(data, key, server);
+                    HandleMessage(decoded);
+                    RecordPacketFlow(fromServer,fromServer?srcIp:dstIp,fromServer?srcPort:dstPort,decoded.Id,server);
                 }
 
                 if (msg.Any() && ContinueBytes == null)
@@ -304,6 +319,16 @@ namespace PangPacketSniffer
         }
 
         private static byte[] ContinueBytes { get; set; } // for TCP Segmentation
+
+        private static void RecordPacketFlow(bool fromServer, IPAddress serverIp, int port, int packetId, ServerTypeEnum type)
+        {
+            packerFlowStream.Write($"[{DateTime.Now:T}]");
+            packerFlowStream.Write(!fromServer
+                ? $"Client ==[{packetId:X4}]=> {type} Server({serverIp}:{port})"
+                : $"Client <=[{packetId:X4}]== {type} Server({serverIp}:{port})");
+            packerFlowStream.WriteLine();
+        }
+        private static StreamWriter packerFlowStream { get; set; }
 
         private static void HandleMessage(IPangMessage msg)
         {
