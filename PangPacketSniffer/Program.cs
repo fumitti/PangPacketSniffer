@@ -162,7 +162,7 @@ namespace PangPacketSniffer
                 {
                     Console.WriteLine($"---{server} Server Packet(from:{srcIp})---");
                     Console.WriteLine($"---Hello Message(Size:{tcpPacket.PayloadData.Length})---");
-                    HandleMessage(new PangServerMessage(tcpPacket.PayloadData, ServerTypeEnum.Message));
+                    HandleMessage(new PangServerMessage(tcpPacket.PayloadData, server));
                     MessageKeyIndex = tcpPacket.PayloadData[7];
                     ConnectingMessageServer = MessageServers.Single(m => Equals(m.IP, srcIp) && m.Port == srcPort);
                     return;
