@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -542,7 +542,7 @@ namespace PangPacketSniffer
 
         public byte Empty => RawMessage[3];
         public int MsgSize { get; set; }
-        public short Id { get; set; }
+        public short Id => Message[0];
         public byte[] Message { get; }
         public byte[] RawMessage { get; }
         public byte KeyIndex { get; }
