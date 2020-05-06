@@ -117,10 +117,8 @@ namespace PangPacketSniffer
             var server = ServerTypeEnum.Unknown;
             var key = LoginKeyIndex;
             var checkHeader = tcpPacket.PayloadData.Take(6).ToArray();
-            if (srcIp.Equals(LoginServerIP) || dstIp.Equals(LoginServerIP))
+            if ((srcIp.Equals(LoginServerIP) || dstIp.Equals(LoginServerIP)) && (!fromServer || srcPort == LoginServerPort) && (fromServer || dstPort == LoginServerPort))
             {
-                if (fromServer && srcPort != LoginServerPort || !fromServer && dstPort != LoginServerPort)
-                    return;
                 var loginHelloHeader = new byte[] {0x00, 0x0b, 0x00, 0x00, 0x00, 0x00};
                 server = ServerTypeEnum.Login;
                 if (checkHeader.SequenceEqual(loginHelloHeader))
