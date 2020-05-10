@@ -149,7 +149,7 @@ namespace PangPacketSniffer
                     HandleMessage(new PangServerMessage(tcpPacket.PayloadData, server));
                     RecordPacketFlow(fromServer, fromServer ? srcIp : dstIp, fromServer ? srcPort : dstPort, 0, server);
                     GameKeyIndex = tcpPacket.PayloadData[8];
-                    ConnectingGameServer = GameServers.Single(g => Equals(g.IP, srcIp) && g.Port == srcPort);
+                    ConnectingGameServer = GameServers.First(g => Equals(g.IP, srcIp) && g.Port == srcPort);
                     return;
                 }
                 if (fromServer && !CheckCapture(ConnectingGameServer, srcIp, srcPort) ||
@@ -334,7 +334,7 @@ namespace PangPacketSniffer
             Console.WriteLine();
             var basePath = Path.Combine(LaunchTime.ToString("s").Replace(':', '_'), msg.ServerType.ToString(),
                 msg is PangServerMessage ? "Server" : "Client", msg.Id.ToString("X4"));
-            var fileTime = DateTime.Now.ToString("s").Replace(':', '_');
+            var fileTime = DateTime.Now.ToString("O").Replace(':', '_');
 
             var out1 = new FileInfo(Path.Combine(basePath, fileTime + ".txt"));
             out1.Directory?.Create();
