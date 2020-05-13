@@ -361,8 +361,9 @@ namespace PangPacketSniffer
                                 {
                                     var name = UsingEncode.GetString(data[0..40]).Trim('\0');
                                     var id = BitConverter.ToInt32(data[40..44], 0);
-                                    var ip = IPAddress.Parse(UsingEncode.GetString(data[52..68]).Trim('\0'));
+                                    var ip = IPAddress.Parse(UsingEncode.GetString(data[52..70]).Trim('\0'));
                                     var port = BitConverter.ToInt16(data[70..72]);
+                                    if (Equals(ip, IPAddress.Parse("0.0.0.0"))) ip = LoginServerIP;
                                     var s = new GameServer(ip, port, name, id);
                                     GameServers.Add(s);
                                     BreakIpAddresses.Add(ip);
@@ -378,8 +379,9 @@ namespace PangPacketSniffer
                                 {
                                     var name = UsingEncode.GetString(msgData[0..40]).Trim('\0');
                                     var id = BitConverter.ToInt32(msgData[40..44], 0);
-                                    var ip = IPAddress.Parse(UsingEncode.GetString(msgData[52..68]).Trim('\0'));
+                                    var ip = IPAddress.Parse(UsingEncode.GetString(msgData[52..70]).Trim('\0'));
                                     var port = BitConverter.ToInt16(msgData[70..72]);
+                                    if (Equals(ip, IPAddress.Parse("0.0.0.0"))) ip = LoginServerIP;
                                     var s = new MessageServer(ip, port, name, id);
                                     MessageServers.Add(s);
                                     BreakIpAddresses.Add(ip);
